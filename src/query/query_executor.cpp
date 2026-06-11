@@ -46,19 +46,17 @@ std::function<bool(const Row&)> makePredicate(const Schema& schema,
         throw QueryError("column '" + where.column + "' is " +
                          toString(column->type) + ", got '" + where.value + "'");
     }
-    const DataType type = column->type;
-    return [name = where.column, literal = where.value, op = where.op,
-            type](const Row& row) {
-        int cmp = 0;
-        if (type == DataType::INT) {
-            const std::int64_t actual = parseInt(row.get(name));
-            const std::int64_t expected = parseInt(literal);
-            cmp = actual < expected ? -1 : (actual > expected ? 1 : 0);
-        } else {
-            const int raw = row.get(name).compare(literal);
-            cmp = raw < 0 ? -1 : (raw > 0 ? 1 : 0);
-        }
-        return applyOp(op, cmp);
+    if (column->type == DataType::INT) {
+        // Parse the literal once; rows already hold native int64 cells.
+        const std::int64_t expected = parseInt(where.value);
+        return [name = where.column, expected, op = where.op](const Row& row) {
+            const std::int64_t actual = row.getInt(name);
+            return applyOp(op, actual < expected ? -1 : (actual > expected ? 1 : 0));
+        };
+    }
+    return [name = where.column, literal = where.value, op = where.op](const Row& row) {
+        const int raw = row.get(name).compare(literal);
+        return applyOp(op, raw < 0 ? -1 : (raw > 0 ? 1 : 0));
     };
 }
 

@@ -49,15 +49,17 @@ void Row::set(const std::string& column, std::string value) {
     if (*index >= values_.size()) {
         values_.resize(schema_->columnCount());  // schema grew after construction
     }
-    values_[*index] = std::move(value);
+    if (type == DataType::INT) {  // parse once here, store the native value
+        std::int64_t parsed = 0;
+        std::from_chars(value.data(), value.data() + value.size(), parsed);
+        values_[*index] = parsed;
+    } else {
+        values_[*index] = std::move(value);
+    }
 }
 
-const std::string& Row::get(const std::string& column) const {
-    const auto index = schema_->columnIndex(column);
-    if (!index || *index >= values_.size() || !values_[*index]) {
-        throw std::out_of_range("Row: column '" + column + "' is not set");
-    }
-    return *values_[*index];
+std::string Row::get(const std::string& column) const {
+    return toString(value(column));
 }
 
 std::int64_t Row::getInt(const std::string& column) const {
@@ -65,10 +67,15 @@ std::int64_t Row::getInt(const std::string& column) const {
     if (col && col->type != DataType::INT) {
         throw std::invalid_argument("Row: column '" + column + "' is not INT");
     }
-    const std::string& raw = get(column);
-    std::int64_t parsed = 0;
-    std::from_chars(raw.data(), raw.data() + raw.size(), parsed);
-    return parsed;  // set() already guaranteed this parses
+    return std::get<std::int64_t>(value(column));
+}
+
+const Value& Row::value(const std::string& column) const {
+    const auto index = schema_->columnIndex(column);
+    if (!index || *index >= values_.size() || !values_[*index]) {
+        throw std::out_of_range("Row: column '" + column + "' is not set");
+    }
+    return *values_[*index];
 }
 
 bool Row::has(const std::string& column) const noexcept {
@@ -95,7 +102,7 @@ std::ostream& operator<<(std::ostream& os, const Row& row) {
         if (i > 0) os << ", ";
         os << columns[i].name << "=";
         if (i < row.values_.size() && row.values_[i]) {
-            os << *row.values_[i];
+            os << toString(*row.values_[i]);
         } else {
             os << "NULL";
         }

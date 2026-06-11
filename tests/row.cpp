@@ -99,5 +99,14 @@ int main() {
     // Rows share the schema, they do not copy it
     CHECK(&copy.schema() == schema.get());
 
+    // Cells are typed: INT columns hold a native int64, parsed once in set()
+    Row typed(schema);
+    typed.set("id", "007");
+    CHECK_EQ(typed.get("id"), "7");  // canonical integer, not the raw text
+    CHECK(std::holds_alternative<std::int64_t>(typed.value("id")));
+    typed.set("name", "42");
+    CHECK(std::holds_alternative<std::string>(typed.value("name")));
+    CHECK_THROWS(typed.value("age"), std::out_of_range);  // unset
+
     return testfw::testSummary("row");
 }

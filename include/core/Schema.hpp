@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cstdint>
 #include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace cppdb {
@@ -13,7 +15,13 @@ enum class DataType {
     TEXT,
 };
 
+// A typed cell: INT columns hold a real int64, TEXT columns hold a string.
+// Parsing happens once at the boundary (Row::set); everything downstream
+// compares and copies native values instead of re-parsing strings.
+using Value = std::variant<std::int64_t, std::string>;
+
 std::string toString(DataType type);
+std::string toString(const Value& value);
 
 // Returns nullopt for unknown names. Expects the SQL spelling ("INT", "TEXT").
 std::optional<DataType> dataTypeFromString(std::string_view name);

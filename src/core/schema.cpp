@@ -19,6 +19,13 @@ std::string toString(DataType type) {
     return "UNKNOWN";
 }
 
+std::string toString(const Value& value) {
+    if (const auto* number = std::get_if<std::int64_t>(&value)) {
+        return std::to_string(*number);
+    }
+    return std::get<std::string>(value);
+}
+
 std::optional<DataType> dataTypeFromString(std::string_view name) {
     if (name == "INT") return DataType::INT;
     if (name == "TEXT") return DataType::TEXT;
@@ -68,9 +75,10 @@ std::optional<std::size_t> Schema::columnIndex(const std::string& name) const no
 }
 
 bool Schema::validate(const Row& row) const {
+    // Presence is all that needs checking: cells are typed at set() time, so
+    // a stored value can never mismatch its column's type.
     for (const Column& column : columns_) {
         if (!row.has(column.name)) return false;
-        if (!isValidValueFor(column.type, row.get(column.name))) return false;
     }
     return true;
 }

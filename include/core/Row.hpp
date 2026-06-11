@@ -11,9 +11,10 @@
 
 namespace cppdb {
 
-// A single record bound to a schema. Values are stored as strings in schema
-// column order; a column is NULL until set(). The schema is shared (not
-// referenced) so a Row stays valid even if the owning table is moved.
+// A single record bound to a schema. Cells are stored as typed Values in
+// schema column order — INT columns are parsed exactly once, in set() — and
+// a column is NULL until set(). The schema is shared (not referenced) so a
+// Row stays valid even if the owning table is moved.
 //
 // The Rule of Five is implemented explicitly: this class is the project's
 // exercise in copy/move semantics, see concepts/ for the why. A moved-from
@@ -30,15 +31,20 @@ public:
     ~Row();
 
     // Throws std::invalid_argument on unknown column or a value that does not
-    // type-check against the column's DataType.
+    // type-check against the column's DataType. INT literals are parsed here.
     void set(const std::string& column, std::string value);
 
-    // Throws std::out_of_range on unknown or unset column.
-    const std::string& get(const std::string& column) const;
+    // The cell formatted as a string. Throws std::out_of_range on unknown or
+    // unset column.
+    std::string get(const std::string& column) const;
 
-    // get() parsed as int64. Throws std::out_of_range like get(); throws
-    // std::invalid_argument if the column is not an INT column.
+    // The native int64 of an INT cell — no parsing, the variant already holds
+    // it. Throws std::out_of_range like get(); throws std::invalid_argument
+    // if the column is not an INT column.
     std::int64_t getInt(const std::string& column) const;
+
+    // The raw typed cell. Throws std::out_of_range on unknown/unset column.
+    const Value& value(const std::string& column) const;
 
     bool has(const std::string& column) const noexcept;
     bool isComplete() const noexcept;  // every schema column has a value
@@ -54,7 +60,7 @@ public:
 
 private:
     std::shared_ptr<const Schema> schema_;
-    std::vector<std::optional<std::string>> values_;  // parallel to schema columns
+    std::vector<std::optional<Value>> values_;  // parallel to schema columns
 };
 
 }  // namespace cppdb
