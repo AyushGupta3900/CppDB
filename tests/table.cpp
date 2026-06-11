@@ -92,13 +92,29 @@ int main() {
     CHECK_EQ(users.deleteWhere([](const Row& r) { return r.getInt("age") >= 30; }), 2u);
     CHECK_EQ(users.rowCount(), 0u);
 
-    // Volume: storage survives rehashes
+    // Volume: storage survives many node splits
     Table bulk{userSchema()};
     for (int i = 0; i < 1000; ++i) {
         CHECK(bulk.insert(makeUser(bulk, i, "user" + std::to_string(i), i % 80)));
     }
     CHECK_EQ(bulk.rowCount(), 1000u);
     CHECK_EQ(bulk.findById(999)->get("name"), "user999");
+
+    // B-tree storage: scans come back ordered by id even after shuffled inserts
+    Table ordered{userSchema()};
+    for (int id : {42, 7, 99, 1, 63}) {
+        CHECK(ordered.insert(makeUser(ordered, id, "u", 20)));
+    }
+    auto scanned = ordered.selectAll();
+    CHECK_EQ(scanned.size(), 5u);
+    CHECK_EQ(scanned[0].getInt("id"), 1);
+    CHECK_EQ(scanned[4].getInt("id"), 99);
+
+    // Range scan is inclusive on both ends
+    auto ranged = ordered.selectIdRange(7, 63);
+    CHECK_EQ(ranged.size(), 3u);
+    CHECK_EQ(ranged[0].getInt("id"), 7);
+    CHECK_EQ(ranged[2].getInt("id"), 63);
 
     // ---- Database ----
     Database db;

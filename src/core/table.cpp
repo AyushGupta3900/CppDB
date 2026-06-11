@@ -32,14 +32,14 @@ bool Table::insert(Row row) {
 
 std::optional<Row> Table::findById(std::int64_t id) const {
     ReadGuard guard(lock_);
-    const Row* row = rows_.find(id);
+    const Row* row = rows_.search(id);
     if (row == nullptr) return std::nullopt;
     return *row;
 }
 
 bool Table::deleteById(std::int64_t id) {
     WriteGuard guard(lock_);
-    return rows_.erase(id);
+    return rows_.remove(id);
 }
 
 std::size_t Table::rowCount() const {
@@ -51,7 +51,7 @@ std::vector<Row> Table::selectWhere(
     const std::function<bool(const Row&)>& predicate) const {
     ReadGuard guard(lock_);
     std::vector<Row> result;
-    rows_.forEach([&](const std::int64_t&, const Row& row) {
+    rows_.forEachInOrder([&](const std::int64_t&, const Row& row) {
         if (predicate(row)) result.push_back(row);
     });
     return result;
@@ -64,11 +64,19 @@ std::vector<Row> Table::selectAll() const {
 std::size_t Table::deleteWhere(const std::function<bool(const Row&)>& predicate) {
     WriteGuard guard(lock_);  // scan + erase as one atomic operation
     std::vector<std::int64_t> doomed;
-    rows_.forEach([&](const std::int64_t& id, const Row& row) {
+    rows_.forEachInOrder([&](const std::int64_t& id, const Row& row) {
         if (predicate(row)) doomed.push_back(id);
     });
-    for (const std::int64_t id : doomed) rows_.erase(id);
+    for (const std::int64_t id : doomed) rows_.remove(id);
     return doomed.size();
+}
+
+std::vector<Row> Table::selectIdRange(std::int64_t lo, std::int64_t hi) const {
+    ReadGuard guard(lock_);
+    std::vector<Row> result;
+    rows_.forEachRange(lo, hi,
+                       [&](const std::int64_t&, const Row& row) { result.push_back(row); });
+    return result;
 }
 
 }  // namespace cppdb
