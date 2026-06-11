@@ -19,10 +19,10 @@ Legend: ✅ done & reviewed · 🚧 in progress · ⬜ not started
 - ✅ LockFreeQueue — atomics, CAS
 
 ## Stage 4 — B-Tree Index
-- ⬜ BTree<K,V>
+- ✅ BTree<K,V>
 
 ## Stage 5 — LRU Cache
-- ⬜ LRUCache<K,V>
+- ✅ LRUCache<K,V>
 
 ## Stage 6 — Query Parser
 - ⬜ Lexer → Parser → Executor

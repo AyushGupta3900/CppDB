@@ -116,6 +116,27 @@ int main() {
     CHECK_EQ(ranged[0].getInt("id"), 7);
     CHECK_EQ(ranged[2].getInt("id"), 63);
 
+    // ---- LRU read cache ----
+    Table cached{userSchema(), /*cacheCapacity=*/4};
+    cached.insert(makeUser(cached, 1, "Alice", 30));
+    CHECK_EQ(cached.cacheHits(), 0u);
+    CHECK(cached.findById(1).has_value());   // miss -> fills cache
+    CHECK(cached.findById(1).has_value());   // hit
+    CHECK_EQ(cached.cacheHits(), 1u);
+    CHECK_EQ(cached.cacheMisses(), 1u);
+
+    // Deletion invalidates: a reinserted id must serve the NEW row
+    CHECK(cached.deleteById(1));
+    CHECK(!cached.findById(1).has_value());
+    cached.insert(makeUser(cached, 1, "NewAlice", 31));
+    CHECK_EQ(cached.findById(1)->get("name"), "NewAlice");
+
+    // deleteWhere also invalidates cached rows
+    cached.insert(makeUser(cached, 2, "Bob", 25));
+    CHECK(cached.findById(2).has_value());
+    CHECK_EQ(cached.deleteWhere([](const Row& r) { return r.getInt("id") == 2; }), 1u);
+    CHECK(!cached.findById(2).has_value());
+
     // ---- Database ----
     Database db;
     CHECK(db.createTable("users", userSchema()));

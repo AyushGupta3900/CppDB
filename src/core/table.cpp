@@ -5,8 +5,9 @@
 
 namespace cppdb {
 
-Table::Table(Schema schema)
-    : schema_(std::make_shared<const Schema>(std::move(schema))) {
+Table::Table(Schema schema, std::size_t cacheCapacity)
+    : schema_(std::make_shared<const Schema>(std::move(schema))),
+      cache_(cacheCapacity) {
     const Column* idColumn = schema_->findColumn(kIdColumn);
     if (idColumn == nullptr || idColumn->type != DataType::INT) {
         throw std::invalid_argument(
@@ -32,14 +33,27 @@ bool Table::insert(Row row) {
 
 std::optional<Row> Table::findById(std::int64_t id) const {
     ReadGuard guard(lock_);
+    {
+        std::lock_guard<std::mutex> cacheGuard(cacheMutex_);
+        if (const Row* hit = cache_.get(id)) return *hit;
+    }
     const Row* row = rows_.search(id);
     if (row == nullptr) return std::nullopt;
+    {
+        std::lock_guard<std::mutex> cacheGuard(cacheMutex_);
+        cache_.put(id, *row);
+    }
     return *row;
 }
 
 bool Table::deleteById(std::int64_t id) {
     WriteGuard guard(lock_);
-    return rows_.remove(id);
+    const bool removed = rows_.remove(id);
+    if (removed) {
+        std::lock_guard<std::mutex> cacheGuard(cacheMutex_);
+        cache_.erase(id);
+    }
+    return removed;
 }
 
 std::size_t Table::rowCount() const {
@@ -67,8 +81,22 @@ std::size_t Table::deleteWhere(const std::function<bool(const Row&)>& predicate)
     rows_.forEachInOrder([&](const std::int64_t& id, const Row& row) {
         if (predicate(row)) doomed.push_back(id);
     });
-    for (const std::int64_t id : doomed) rows_.remove(id);
+    std::lock_guard<std::mutex> cacheGuard(cacheMutex_);
+    for (const std::int64_t id : doomed) {
+        rows_.remove(id);
+        cache_.erase(id);
+    }
     return doomed.size();
+}
+
+std::size_t Table::cacheHits() const {
+    std::lock_guard<std::mutex> cacheGuard(cacheMutex_);
+    return cache_.hits();
+}
+
+std::size_t Table::cacheMisses() const {
+    std::lock_guard<std::mutex> cacheGuard(cacheMutex_);
+    return cache_.misses();
 }
 
 std::vector<Row> Table::selectIdRange(std::int64_t lo, std::int64_t hi) const {
