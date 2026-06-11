@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <stdexcept>
 
+#include "core/Row.hpp"
+
 namespace cppdb {
 
 std::string toString(DataType type) {
@@ -63,6 +65,14 @@ std::optional<std::size_t> Schema::columnIndex(const std::string& name) const no
         if (columns_[i].name == name) return i;
     }
     return std::nullopt;
+}
+
+bool Schema::validate(const Row& row) const {
+    for (const Column& column : columns_) {
+        if (!row.has(column.name)) return false;
+        if (!isValidValueFor(column.type, row.get(column.name))) return false;
+    }
+    return true;
 }
 
 }  // namespace cppdb

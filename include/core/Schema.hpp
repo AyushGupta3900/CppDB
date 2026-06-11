@@ -25,6 +25,8 @@ bool isValidValueFor(DataType type, const std::string& value);
 struct Column {
     std::string name;
     DataType type;
+
+    bool operator==(const Column&) const = default;
 };
 
 class Row;
