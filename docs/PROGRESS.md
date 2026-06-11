@@ -28,7 +28,7 @@ Legend: ✅ done & reviewed · 🚧 in progress · ⬜ not started
 - ✅ Lexer → Parser → Executor
 
 ## Stage 7 — TCP Server
-- ⬜ TCPServer
+- ✅ TCPServer
 
 ---
 
