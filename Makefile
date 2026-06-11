@@ -14,7 +14,7 @@ BIN      := build/cppdb
 TEST_SRC := $(wildcard tests/*.cpp)
 TEST_BIN := $(patsubst tests/%.cpp,build/test_%,$(TEST_SRC))
 
-.PHONY: all clean tests run
+.PHONY: all clean tests run check
 
 all: $(BIN)
 
@@ -31,6 +31,10 @@ build/test_%: tests/%.cpp $(SRC)
 
 # Build all tests
 tests: $(TEST_BIN)
+
+# Build and run every test; fails on the first failing test binary
+check: $(TEST_BIN)
+	@for t in $(TEST_BIN); do echo "== $$t"; ./$$t || exit 1; done
 
 run: $(BIN)
 	./$(BIN)

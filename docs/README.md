@@ -6,8 +6,9 @@ This `docs/` folder is the **map**. The actual learning happens across three fol
 
 | Folder        | What lives here                                                                 |
 |---------------|---------------------------------------------------------------------------------|
-| `concepts/`   | **The "why".** Deep explanations of each C++ concept, why it exists, when to use it, and the traps. Read these first. |
-| `syntax/`     | **The "how".** Compact syntax references for each feature — copy-paste-able patterns you'll forget and re-look-up. |
+| `concepts/`   | **Lessons — the "why".** Several concepts woven into a build task. Read these first. |
+| `cpp-concepts/` | **Atoms — the glossary.** One file per single C++ concept (What·Why·Example·Used in·Gotcha). Look-up reference; grows every lesson. |
+| `syntax/`     | **The "how".** Compact syntax references — copy-paste-able patterns you'll forget and re-look-up. |
 | `docs/`       | **The "what".** Project overview, architecture, build instructions, and progress tracking. |
 | `include/` `src/` `tests/` | **Your code.** You write these. I review and hint. |
 
