@@ -7,6 +7,7 @@ CXXFLAGS := -std=c++23 -Wall -Wextra -Wpedantic -g -Iinclude
 LDFLAGS  := -pthread
 
 SRC      := $(shell find src -name '*.cpp' 2>/dev/null)
+HDR      := $(shell find include tests -name '*.hpp' 2>/dev/null)
 OBJ      := $(SRC:.cpp=.o)
 BIN      := build/cppdb
 
@@ -19,15 +20,17 @@ TEST_BIN := $(patsubst tests/%.cpp,build/test_%,$(TEST_SRC))
 all: $(BIN)
 
 # Main app: links main.cpp with everything in src/
-$(BIN): main.cpp $(SRC)
+# Headers are prerequisites too, so editing a .hpp triggers a rebuild,
+# but only the .cpp files are passed to the compiler.
+$(BIN): main.cpp $(SRC) $(HDR)
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LDFLAGS)
 
 # Build & run a single test:  make build/test_schema && ./build/test_schema
 # A test is linked against all src/ so it can use your classes.
-build/test_%: tests/%.cpp $(SRC)
+build/test_%: tests/%.cpp $(SRC) $(HDR)
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LDFLAGS)
 
 # Build all tests
 tests: $(TEST_BIN)

@@ -46,11 +46,13 @@ inline int testSummary(const std::string& suiteName) {
         }                                                               \
     } while (0)
 
+// Capture by value: `actual` may be a reference into a temporary (e.g.
+// findById(1)->get("name")) that dies at the end of the declaration.
 #define CHECK_EQ(actual, expected)                                      \
     do {                                                                \
         ++testfw::checks();                                             \
-        const auto& a_ = (actual);                                      \
-        const auto& e_ = (expected);                                    \
+        const auto a_ = (actual);                                       \
+        const auto e_ = (expected);                                     \
         if (!(a_ == e_)) {                                              \
             std::ostringstream oss_;                                    \
             oss_ << "CHECK_EQ(" #actual ", " #expected ")  got: " << a_ \
