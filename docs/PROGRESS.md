@@ -25,7 +25,7 @@ Legend: ✅ done & reviewed · 🚧 in progress · ⬜ not started
 - ✅ LRUCache<K,V>
 
 ## Stage 6 — Query Parser
-- ⬜ Lexer → Parser → Executor
+- ✅ Lexer → Parser → Executor
 
 ## Stage 7 — TCP Server
 - ⬜ TCPServer
