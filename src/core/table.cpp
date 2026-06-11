@@ -1,0 +1,62 @@
+#include "core/Table.hpp"
+
+#include <stdexcept>
+#include <utility>
+
+namespace cppdb {
+
+Table::Table(Schema schema)
+    : schema_(std::make_shared<const Schema>(std::move(schema))) {
+    const Column* idColumn = schema_->findColumn(kIdColumn);
+    if (idColumn == nullptr || idColumn->type != DataType::INT) {
+        throw std::invalid_argument(
+            "Table: schema requires an INT primary-key column named 'id'");
+    }
+}
+
+Row Table::makeRow() const { return Row(schema_); }
+
+bool Table::insert(Row row) {
+    if (row.schema().columns() != schema_->columns()) {
+        throw std::invalid_argument("Table: row schema does not match table schema");
+    }
+    if (!schema_->validate(row)) {
+        throw std::invalid_argument("Table: row is incomplete or fails type checks");
+    }
+    const std::int64_t id = row.getInt(kIdColumn);
+    return rows_.insert(id, std::move(row));
+}
+
+std::optional<Row> Table::findById(std::int64_t id) const {
+    const Row* row = rows_.find(id);
+    if (row == nullptr) return std::nullopt;
+    return *row;
+}
+
+bool Table::deleteById(std::int64_t id) { return rows_.erase(id); }
+
+std::size_t Table::rowCount() const noexcept { return rows_.size(); }
+
+std::vector<Row> Table::selectWhere(
+    const std::function<bool(const Row&)>& predicate) const {
+    std::vector<Row> result;
+    rows_.forEach([&](const std::int64_t&, const Row& row) {
+        if (predicate(row)) result.push_back(row);
+    });
+    return result;
+}
+
+std::vector<Row> Table::selectAll() const {
+    return selectWhere([](const Row&) { return true; });
+}
+
+std::size_t Table::deleteWhere(const std::function<bool(const Row&)>& predicate) {
+    std::vector<std::int64_t> doomed;
+    rows_.forEach([&](const std::int64_t& id, const Row& row) {
+        if (predicate(row)) doomed.push_back(id);
+    });
+    for (const std::int64_t id : doomed) rows_.erase(id);
+    return doomed.size();
+}
+
+}  // namespace cppdb

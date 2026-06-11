@@ -3,10 +3,10 @@
 Legend: ✅ done & reviewed · 🚧 in progress · ⬜ not started
 
 ## Stage 1 — Core OOP & Data Structures
-- 🚧 **Lesson 1: Schema & DataType** — enums, structs, classes, const-correctness, header/source split
-- ⬜ Lesson 2: Row — Rule of Five, move semantics
-- ⬜ Lesson 3: HashMap<K,V> — templates, operator[]
-- ⬜ Lesson 4: Table & Database — composition, ownership
+- ✅ **Lesson 1: Schema & DataType** — enums, structs, classes, const-correctness, header/source split
+- ✅ Lesson 2: Row — Rule of Five, move semantics
+- ✅ Lesson 3: HashMap<K,V> — templates, operator[]
+- ✅ Lesson 4: Table & Database — composition, ownership
 
 ## Stage 2 — Memory Management
 - ⬜ PoolAllocator — placement new, raw memory
