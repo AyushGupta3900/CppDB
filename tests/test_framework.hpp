@@ -4,6 +4,7 @@
 // Each tests/*.cpp is its own binary; call testSummary() at the end of main
 // and return its result so `make check` can detect failures via exit code.
 
+#include <atomic>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -11,13 +12,14 @@
 
 namespace testfw {
 
-inline int& failures() {
-    static int count = 0;
+// Atomic so CHECK can be used from concurrency tests' worker threads.
+inline std::atomic<int>& failures() {
+    static std::atomic<int> count{0};
     return count;
 }
 
-inline int& checks() {
-    static int count = 0;
+inline std::atomic<int>& checks() {
+    static std::atomic<int> count{0};
     return count;
 }
 
@@ -27,11 +29,11 @@ inline void reportFailure(const char* file, int line, const std::string& message
 }
 
 inline int testSummary(const std::string& suiteName) {
-    if (failures() == 0) {
-        std::cout << "[" << suiteName << "] " << checks() << " checks passed\n";
+    if (failures().load() == 0) {
+        std::cout << "[" << suiteName << "] " << checks().load() << " checks passed\n";
         return EXIT_SUCCESS;
     }
-    std::cerr << "[" << suiteName << "] " << failures() << "/" << checks()
+    std::cerr << "[" << suiteName << "] " << failures().load() << "/" << checks().load()
               << " checks FAILED\n";
     return EXIT_FAILURE;
 }
