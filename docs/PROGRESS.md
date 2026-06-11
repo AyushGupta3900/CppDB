@@ -9,14 +9,14 @@ Legend: ✅ done & reviewed · 🚧 in progress · ⬜ not started
 - ✅ Lesson 4: Table & Database — composition, ownership
 
 ## Stage 2 — Memory Management
-- ⬜ PoolAllocator — placement new, raw memory
-- ⬜ UniquePtr — move-only, `= delete`
-- ⬜ SharedPtr — reference counting
+- ✅ PoolAllocator — placement new, raw memory
+- ✅ UniquePtr — move-only, `= delete`
+- ✅ SharedPtr — reference counting
 
 ## Stage 3 — Concurrency
-- ⬜ RWLock — mutex, condition_variable
-- ⬜ ThreadPool — std::thread, std::function
-- ⬜ LockFreeQueue — atomics, CAS
+- ✅ RWLock — mutex, condition_variable
+- ✅ ThreadPool — std::thread, std::function
+- ✅ LockFreeQueue — atomics, CAS
 
 ## Stage 4 — B-Tree Index
 - ⬜ BTree<K,V>
