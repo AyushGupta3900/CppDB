@@ -42,6 +42,7 @@ Statement Parser::parse() {
     if (first.value == "DROP") return parseDrop();
     if (first.value == "INSERT") return parseInsert();
     if (first.value == "SELECT") return parseSelect();
+    if (first.value == "UPDATE") return parseUpdate();
     if (first.value == "DELETE") return parseDelete();
     fail("unsupported statement '" + first.value + "'");
 }
@@ -96,11 +97,7 @@ InsertStatement Parser::parseInsert() {
     expectKeyword("VALUES");
     expectPunctuation('(');
     while (true) {
-        const Token& token = peek();
-        if (token.type != TokenType::NUMBER && token.type != TokenType::STRING) {
-            fail("expected a literal value");
-        }
-        stmt.values.push_back(advance().value);
+        stmt.values.push_back(parseLiteral());
         if (peek().type == TokenType::PUNCTUATION && peek().value == ",") {
             advance();
             continue;
@@ -133,7 +130,29 @@ SelectStatement Parser::parseSelect() {
     return stmt;
 }
 
-// DELETE FROM name [WHERE col op literal]
+// UPDATE name SET col = literal, ... [WHERE col op literal AND ...]
+UpdateStatement Parser::parseUpdate() {
+    expectKeyword("UPDATE");
+    UpdateStatement stmt;
+    stmt.table = expect(TokenType::IDENTIFIER, "table name").value;
+    expectKeyword("SET");
+    while (true) {
+        std::string column = expect(TokenType::IDENTIFIER, "column name").value;
+        const Token& eq = expect(TokenType::OPERATOR, "'='");
+        if (eq.value != "=") fail("expected '=' in SET assignment");
+        stmt.assignments.emplace_back(std::move(column), parseLiteral());
+        if (peek().type == TokenType::PUNCTUATION && peek().value == ",") {
+            advance();
+            continue;
+        }
+        break;
+    }
+    stmt.where = parseOptionalWhere();
+    expectEnd();
+    return stmt;
+}
+
+// DELETE FROM name [WHERE col op literal AND ...]
 DeleteStatement Parser::parseDelete() {
     expectKeyword("DELETE");
     expectKeyword("FROM");
@@ -144,18 +163,29 @@ DeleteStatement Parser::parseDelete() {
     return stmt;
 }
 
-std::optional<WhereClause> Parser::parseOptionalWhere() {
-    if (!peekIsKeyword("WHERE")) return std::nullopt;
+WhereList Parser::parseOptionalWhere() {
+    WhereList conditions;
+    if (!peekIsKeyword("WHERE")) return conditions;
     advance();
-    WhereClause where;
-    where.column = expect(TokenType::IDENTIFIER, "column name").value;
-    where.op = compareOpFromToken(expect(TokenType::OPERATOR, "comparison operator"));
-    const Token& literal = peek();
-    if (literal.type != TokenType::NUMBER && literal.type != TokenType::STRING) {
-        fail("expected a literal after the comparison operator");
+    while (true) {
+        WhereClause where;
+        where.column = expect(TokenType::IDENTIFIER, "column name").value;
+        where.op =
+            compareOpFromToken(expect(TokenType::OPERATOR, "comparison operator"));
+        where.value = parseLiteral();
+        conditions.push_back(std::move(where));
+        if (!peekIsKeyword("AND")) break;
+        advance();
     }
-    where.value = advance().value;
-    return where;
+    return conditions;
+}
+
+std::string Parser::parseLiteral() {
+    const Token& token = peek();
+    if (token.type != TokenType::NUMBER && token.type != TokenType::STRING) {
+        fail("expected a literal value");
+    }
+    return advance().value;
 }
 
 std::vector<std::string> Parser::parseIdentifierList() {

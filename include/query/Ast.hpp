@@ -1,7 +1,7 @@
 #pragma once
 
-#include <optional>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -20,6 +20,9 @@ struct WhereClause {
     CompareOp op;
     std::string value;
 };
+
+// A WHERE is a conjunction: every clause must hold (AND). Empty = no filter.
+using WhereList = std::vector<WhereClause>;
 
 struct ColumnDef {
     std::string name;
@@ -44,20 +47,28 @@ struct InsertStatement {
     std::vector<std::string> values;  // parallel to columns
 };
 
-// SELECT * | col, col FROM users [WHERE ...]
+// SELECT * | col, col FROM users [WHERE cond AND cond ...]
 struct SelectStatement {
     std::string table;
     std::vector<std::string> columns;  // empty means *
-    std::optional<WhereClause> where;
+    WhereList where;
 };
 
-// DELETE FROM users [WHERE ...]
+// UPDATE users SET col = literal, ... [WHERE cond AND cond ...]
+struct UpdateStatement {
+    std::string table;
+    std::vector<std::pair<std::string, std::string>> assignments;  // col -> literal
+    WhereList where;
+};
+
+// DELETE FROM users [WHERE cond AND cond ...]
 struct DeleteStatement {
     std::string table;
-    std::optional<WhereClause> where;
+    WhereList where;
 };
 
-using Statement = std::variant<CreateTableStatement, DropTableStatement,
-                               InsertStatement, SelectStatement, DeleteStatement>;
+using Statement =
+    std::variant<CreateTableStatement, DropTableStatement, InsertStatement,
+                 SelectStatement, UpdateStatement, DeleteStatement>;
 
 }  // namespace cppdb

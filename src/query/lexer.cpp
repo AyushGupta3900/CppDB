@@ -8,9 +8,9 @@ namespace cppdb {
 
 namespace {
 
-constexpr std::array<const char*, 13> kKeywords = {
+constexpr std::array<const char*, 15> kKeywords = {
     "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "DELETE",
-    "CREATE", "DROP",  "TABLE", "INT",   "TEXT",  "AND",
+    "CREATE", "DROP",  "TABLE", "INT",   "TEXT",  "AND",    "UPDATE", "SET",
 };
 
 bool isKeyword(const std::string& upper) {
@@ -72,15 +72,26 @@ std::vector<Token> Lexer::tokenize() {
         if (c == '\'' || c == '"') {
             const char quote = c;
             ++i;
-            const std::size_t contentStart = i;
-            while (i < n && input_[i] != quote) ++i;
-            if (i == n) {
+            std::string content;
+            bool terminated = false;
+            while (i < n) {
+                if (input_[i] == quote) {
+                    if (i + 1 < n && input_[i + 1] == quote) {  // SQL escape: '' -> '
+                        content += quote;
+                        i += 2;
+                        continue;
+                    }
+                    terminated = true;
+                    ++i;  // closing quote
+                    break;
+                }
+                content += input_[i++];
+            }
+            if (!terminated) {
                 throw QueryError("unterminated string literal at position " +
                                  std::to_string(start));
             }
-            tokens.push_back(
-                {TokenType::STRING, input_.substr(contentStart, i - contentStart), start});
-            ++i;  // closing quote
+            tokens.push_back({TokenType::STRING, std::move(content), start});
             continue;
         }
 

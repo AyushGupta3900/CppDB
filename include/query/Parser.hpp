@@ -22,10 +22,12 @@ private:
     DropTableStatement parseDrop();
     InsertStatement parseInsert();
     SelectStatement parseSelect();
+    UpdateStatement parseUpdate();
     DeleteStatement parseDelete();
 
-    std::optional<WhereClause> parseOptionalWhere();
+    WhereList parseOptionalWhere();  // WHERE cond (AND cond)* | nothing
     std::vector<std::string> parseIdentifierList();
+    std::string parseLiteral();
 
     const Token& peek() const;
     const Token& advance();

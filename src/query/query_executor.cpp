@@ -1,5 +1,6 @@
 #include "query/QueryExecutor.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cstdint>
 #include <functional>
@@ -60,37 +61,78 @@ std::function<bool(const Row&)> makePredicate(const Schema& schema,
     };
 }
 
-// Fetch rows for a SELECT/DELETE, routing primary-key comparisons through
-// the B-tree (point lookup or pruned range scan) instead of a full scan.
-std::vector<Row> fetchRows(const Table& table,
-                           const std::optional<WhereClause>& where) {
-    if (!where) return table.selectAll();
-
-    if (where->column == Table::kIdColumn && where->op != CompareOp::NE) {
-        if (!isValidValueFor(DataType::INT, where->value)) {
-            throw QueryError("column 'id' is INT, got '" + where->value + "'");
-        }
-        const std::int64_t v = parseInt(where->value);
-        constexpr std::int64_t kMin = std::numeric_limits<std::int64_t>::min();
-        constexpr std::int64_t kMax = std::numeric_limits<std::int64_t>::max();
-        switch (where->op) {
-            case CompareOp::EQ: {
-                auto row = table.findById(v);
-                return row ? std::vector<Row>{std::move(*row)} : std::vector<Row>{};
-            }
-            case CompareOp::LT:
-                return v == kMin ? std::vector<Row>{} : table.selectIdRange(kMin, v - 1);
-            case CompareOp::LE:
-                return table.selectIdRange(kMin, v);
-            case CompareOp::GT:
-                return v == kMax ? std::vector<Row>{} : table.selectIdRange(v + 1, kMax);
-            case CompareOp::GE:
-                return table.selectIdRange(v, kMax);
-            default:
-                break;  // unreachable; NE was excluded above
-        }
+// AND-combines every clause into one predicate (validates all of them).
+std::function<bool(const Row&)> makeConjunction(const Schema& schema,
+                                                const WhereList& conditions) {
+    std::vector<std::function<bool(const Row&)>> predicates;
+    predicates.reserve(conditions.size());
+    for (const WhereClause& clause : conditions) {
+        predicates.push_back(makePredicate(schema, clause));
     }
-    return table.selectWhere(makePredicate(table.schema(), *where));
+    return [predicates = std::move(predicates)](const Row& row) {
+        for (const auto& predicate : predicates) {
+            if (!predicate(row)) return false;
+        }
+        return true;
+    };
+}
+
+bool isIndexableIdClause(const WhereClause& clause) {
+    return clause.column == Table::kIdColumn && clause.op != CompareOp::NE;
+}
+
+// Rows matching an indexable id clause, straight off the B-tree: a point
+// lookup for `=`, a pruned range scan for `< <= > >=`.
+std::vector<Row> rowsByIdClause(const Table& table, const WhereClause& clause) {
+    if (!isValidValueFor(DataType::INT, clause.value)) {
+        throw QueryError("column 'id' is INT, got '" + clause.value + "'");
+    }
+    const std::int64_t v = parseInt(clause.value);
+    constexpr std::int64_t kMin = std::numeric_limits<std::int64_t>::min();
+    constexpr std::int64_t kMax = std::numeric_limits<std::int64_t>::max();
+    switch (clause.op) {
+        case CompareOp::EQ: {
+            auto row = table.findById(v);
+            return row ? std::vector<Row>{std::move(*row)} : std::vector<Row>{};
+        }
+        case CompareOp::LT:
+            return v == kMin ? std::vector<Row>{} : table.selectIdRange(kMin, v - 1);
+        case CompareOp::LE:
+            return table.selectIdRange(kMin, v);
+        case CompareOp::GT:
+            return v == kMax ? std::vector<Row>{} : table.selectIdRange(v + 1, kMax);
+        case CompareOp::GE:
+            return table.selectIdRange(v, kMax);
+        case CompareOp::NE:
+            break;  // not indexable; callers exclude this
+    }
+    throw QueryError("internal: unindexable id clause");
+}
+
+// Fetch rows for a SELECT, narrowing through the B-tree when any clause is
+// an indexable primary-key comparison, then filtering with the rest.
+std::vector<Row> fetchRows(const Table& table, const WhereList& where) {
+    if (where.empty()) return table.selectAll();
+
+    const auto indexable =
+        std::find_if(where.begin(), where.end(), isIndexableIdClause);
+    if (indexable == where.end()) {
+        return table.selectWhere(makeConjunction(table.schema(), where));
+    }
+
+    std::vector<Row> candidates = rowsByIdClause(table, *indexable);
+    WhereList rest;
+    for (auto it = where.begin(); it != where.end(); ++it) {
+        if (it != indexable) rest.push_back(*it);
+    }
+    if (rest.empty()) return candidates;
+
+    const auto predicate = makeConjunction(table.schema(), rest);
+    std::vector<Row> result;
+    for (Row& row : candidates) {
+        if (predicate(row)) result.push_back(std::move(row));
+    }
+    return result;
 }
 
 std::string formatRow(const Row& row, const std::vector<std::string>& columns) {
@@ -183,15 +225,30 @@ std::string QueryExecutor::run(const SelectStatement& stmt) {
     return oss.str();
 }
 
+std::string QueryExecutor::run(const UpdateStatement& stmt) {
+    SharedPtr<Table> table = tableOrThrow(stmt.table);
+    const auto predicate =
+        stmt.where.empty()
+            ? std::function<bool(const Row&)>([](const Row&) { return true; })
+            : makeConjunction(table->schema(), stmt.where);
+    std::size_t updated = 0;
+    try {
+        updated = table->updateWhere(predicate, stmt.assignments);
+    } catch (const std::invalid_argument& e) {
+        throw QueryError(e.what());  // bad column / type / primary-key update
+    }
+    return "OK (" + rowsSuffix(updated) + " updated)";
+}
+
 std::string QueryExecutor::run(const DeleteStatement& stmt) {
     SharedPtr<Table> table = tableOrThrow(stmt.table);
     std::size_t deleted = 0;
-    if (stmt.where && stmt.where->column == Table::kIdColumn &&
-        stmt.where->op == CompareOp::EQ &&
-        isValidValueFor(DataType::INT, stmt.where->value)) {
-        deleted = table->deleteById(parseInt(stmt.where->value)) ? 1 : 0;
-    } else if (stmt.where) {
-        deleted = table->deleteWhere(makePredicate(table->schema(), *stmt.where));
+    if (stmt.where.size() == 1 && stmt.where[0].column == Table::kIdColumn &&
+        stmt.where[0].op == CompareOp::EQ &&
+        isValidValueFor(DataType::INT, stmt.where[0].value)) {
+        deleted = table->deleteById(parseInt(stmt.where[0].value)) ? 1 : 0;
+    } else if (!stmt.where.empty()) {
+        deleted = table->deleteWhere(makeConjunction(table->schema(), stmt.where));
     } else {
         deleted = table->deleteWhere([](const Row&) { return true; });
     }

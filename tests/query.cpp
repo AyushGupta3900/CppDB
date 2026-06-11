@@ -48,6 +48,12 @@ static void testLexer() {
     CHECK_THROWS(Lexer("SELECT ; FROM t").tokenize(), QueryError);
     CHECK_THROWS(Lexer("SELECT 'unterminated").tokenize(), QueryError);
     CHECK_THROWS(Lexer("WHERE a ! b").tokenize(), QueryError);
+
+    // SQL-style doubled-quote escapes
+    auto escaped = Lexer("VALUES ('O''Brien', \"say \"\"hi\"\"\")").tokenize();
+    CHECK_EQ(escaped[2].value, "O'Brien");
+    CHECK_EQ(escaped[4].value, "say \"hi\"");
+    CHECK_THROWS(Lexer("VALUES ('ends with escape''").tokenize(), QueryError);
 }
 
 static void testParserErrors() {
@@ -62,8 +68,11 @@ static void testParserErrors() {
     CHECK_THROWS(parse("CREATE TABLE t (id FLOAT)"), QueryError);
     CHECK_THROWS(parse("DELETE FROM"), QueryError);
     CHECK_THROWS(parse("SELECT * FROM users garbage"), QueryError);  // trailing input
-    CHECK_THROWS(parse("UPDATE users"), QueryError);                  // unsupported
     CHECK_THROWS(parse("SELECT * FROM users WHERE id ="), QueryError);
+    CHECK_THROWS(parse("UPDATE users"), QueryError);            // missing SET
+    CHECK_THROWS(parse("UPDATE users SET"), QueryError);        // missing assignment
+    CHECK_THROWS(parse("UPDATE users SET age < 5"), QueryError);  // not '='
+    CHECK_THROWS(parse("SELECT * FROM users WHERE id = 1 AND"), QueryError);
 }
 
 static void testExecutorEndToEnd() {
@@ -112,6 +121,45 @@ static void testExecutorEndToEnd() {
     CHECK_EQ(exec.execute("SELECT id FROM users WHERE name = 'Bob'"), "id=2\n(1 row)");
     CHECK(isError(exec.execute("SELECT * FROM users WHERE age = 'old'")));  // type mismatch
     CHECK(isError(exec.execute("SELECT * FROM users WHERE email = 'x'")));  // no column
+
+    // WHERE ... AND ... (id clause narrows via the index, rest filters)
+    CHECK_EQ(exec.execute("SELECT name FROM users WHERE id >= 2 AND age > 30"),
+             "name=Carol\n(1 row)");
+    CHECK_EQ(exec.execute("SELECT name FROM users WHERE age > 20 AND age < 31"),
+             "name=Alice\nname=Bob\n(2 rows)");
+    CHECK_EQ(exec.execute("SELECT * FROM users WHERE id = 1 AND name = 'Zed'"),
+             "(0 rows)");
+    CHECK(isError(exec.execute("SELECT * FROM users WHERE id = 1 AND ghost = 2")));
+
+    // UPDATE
+    CHECK_EQ(exec.execute("UPDATE users SET age = 31 WHERE id = 1"),
+             "OK (1 row updated)");
+    CHECK_EQ(exec.execute("SELECT age FROM users WHERE id = 1"), "age=31\n(1 row)");
+    CHECK_EQ(exec.execute("UPDATE users SET name = 'X', age = 1 WHERE age < 32"),
+             "OK (2 rows updated)");
+    CHECK_EQ(exec.execute("SELECT name FROM users WHERE id = 2"), "name=X\n(1 row)");
+    CHECK_EQ(exec.execute("UPDATE users SET age = 99 WHERE id = 404"),
+             "OK (0 rows updated)");
+    CHECK_EQ(exec.execute("UPDATE users SET age = 50"), "OK (3 rows updated)");
+    CHECK(isError(exec.execute("UPDATE users SET id = 9 WHERE id = 1")));   // PK
+    CHECK(isError(exec.execute("UPDATE users SET ghost = 1")));             // column
+    CHECK(isError(exec.execute("UPDATE users SET age = 'old'")));           // type
+    CHECK(isError(exec.execute("UPDATE missing SET age = 1")));             // table
+    // failed UPDATE must not have partially applied
+    CHECK_EQ(exec.execute("SELECT age FROM users WHERE id = 1"), "age=50\n(1 row)");
+    // restore state expected by the DELETE block below
+    CHECK_EQ(exec.execute("UPDATE users SET age = 30, name = 'Alice' WHERE id = 1"),
+             "OK (1 row updated)");
+    CHECK_EQ(exec.execute("UPDATE users SET age = 25 WHERE id = 2"),
+             "OK (1 row updated)");
+    CHECK_EQ(exec.execute("UPDATE users SET age = 35 WHERE id = 3"),
+             "OK (1 row updated)");
+
+    // Escaped quotes survive the round trip
+    CHECK_EQ(exec.execute("UPDATE users SET name = 'O''Brien' WHERE id = 3"),
+             "OK (1 row updated)");
+    CHECK_EQ(exec.execute("SELECT name FROM users WHERE id = 3"),
+             "name=O'Brien\n(1 row)");
 
     // DELETE
     CHECK_EQ(exec.execute("DELETE FROM users WHERE id = 2"), "OK (1 row deleted)");

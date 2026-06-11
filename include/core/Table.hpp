@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "concurrency/RWLock.hpp"
@@ -55,6 +56,14 @@ public:
     std::vector<Row> selectWhere(const std::function<bool(const Row&)>& predicate) const;
     std::vector<Row> selectAll() const;
     std::size_t deleteWhere(const std::function<bool(const Row&)>& predicate);
+
+    // Applies `column = value` assignments to every matching row, atomically
+    // under one write lock. The primary key cannot be reassigned (throws
+    // std::invalid_argument), and values must pre-validate against the schema
+    // (throws before touching any row, so updates are all-or-nothing).
+    std::size_t updateWhere(
+        const std::function<bool(const Row&)>& predicate,
+        const std::vector<std::pair<std::string, std::string>>& assignments);
 
     // All rows with lo <= id <= hi via a pruned B-tree range scan.
     std::vector<Row> selectIdRange(std::int64_t lo, std::int64_t hi) const;

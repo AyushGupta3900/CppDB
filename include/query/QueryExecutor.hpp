@@ -29,6 +29,7 @@ private:
     std::string run(const DropTableStatement& stmt);
     std::string run(const InsertStatement& stmt);
     std::string run(const SelectStatement& stmt);
+    std::string run(const UpdateStatement& stmt);
     std::string run(const DeleteStatement& stmt);
 
     SharedPtr<Table> tableOrThrow(const std::string& name) const;

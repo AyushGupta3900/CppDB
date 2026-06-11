@@ -99,6 +99,43 @@ std::size_t Table::cacheMisses() const {
     return cache_.misses();
 }
 
+std::size_t Table::updateWhere(
+    const std::function<bool(const Row&)>& predicate,
+    const std::vector<std::pair<std::string, std::string>>& assignments) {
+    // Validate every assignment up front so no row is half-updated.
+    for (const auto& [column, value] : assignments) {
+        if (column == kIdColumn) {
+            throw std::invalid_argument("Table: the primary key cannot be updated");
+        }
+        const Column* def = schema_->findColumn(column);
+        if (def == nullptr) {
+            throw std::invalid_argument("Table: unknown column '" + column + "'");
+        }
+        if (!isValidValueFor(def->type, value)) {
+            throw std::invalid_argument("Table: value '" + value +
+                                        "' is not a valid " + toString(def->type) +
+                                        " for column '" + column + "'");
+        }
+    }
+
+    WriteGuard guard(lock_);
+    std::vector<std::int64_t> matched;
+    rows_.forEachInOrder([&](const std::int64_t& id, const Row& row) {
+        if (predicate(row)) matched.push_back(id);
+    });
+    for (const std::int64_t id : matched) {
+        Row* row = rows_.search(id);
+        for (const auto& [column, value] : assignments) {
+            row->set(column, value);  // cannot throw: validated above
+        }
+    }
+    {
+        std::lock_guard<std::mutex> cacheGuard(cacheMutex_);
+        for (const std::int64_t id : matched) cache_.erase(id);
+    }
+    return matched.size();
+}
+
 std::vector<Row> Table::selectIdRange(std::int64_t lo, std::int64_t hi) const {
     ReadGuard guard(lock_);
     std::vector<Row> result;
