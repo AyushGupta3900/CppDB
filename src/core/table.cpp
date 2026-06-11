@@ -17,6 +17,8 @@ Table::Table(Schema schema)
 Row Table::makeRow() const { return Row(schema_); }
 
 bool Table::insert(Row row) {
+    // Validate before taking the write lock: schema is immutable and the row
+    // is caller-local, so this needs no synchronization.
     if (row.schema().columns() != schema_->columns()) {
         throw std::invalid_argument("Table: row schema does not match table schema");
     }
@@ -24,21 +26,30 @@ bool Table::insert(Row row) {
         throw std::invalid_argument("Table: row is incomplete or fails type checks");
     }
     const std::int64_t id = row.getInt(kIdColumn);
+    WriteGuard guard(lock_);
     return rows_.insert(id, std::move(row));
 }
 
 std::optional<Row> Table::findById(std::int64_t id) const {
+    ReadGuard guard(lock_);
     const Row* row = rows_.find(id);
     if (row == nullptr) return std::nullopt;
     return *row;
 }
 
-bool Table::deleteById(std::int64_t id) { return rows_.erase(id); }
+bool Table::deleteById(std::int64_t id) {
+    WriteGuard guard(lock_);
+    return rows_.erase(id);
+}
 
-std::size_t Table::rowCount() const noexcept { return rows_.size(); }
+std::size_t Table::rowCount() const {
+    ReadGuard guard(lock_);
+    return rows_.size();
+}
 
 std::vector<Row> Table::selectWhere(
     const std::function<bool(const Row&)>& predicate) const {
+    ReadGuard guard(lock_);
     std::vector<Row> result;
     rows_.forEach([&](const std::int64_t&, const Row& row) {
         if (predicate(row)) result.push_back(row);
@@ -51,6 +62,7 @@ std::vector<Row> Table::selectAll() const {
 }
 
 std::size_t Table::deleteWhere(const std::function<bool(const Row&)>& predicate) {
+    WriteGuard guard(lock_);  // scan + erase as one atomic operation
     std::vector<std::int64_t> doomed;
     rows_.forEach([&](const std::int64_t& id, const Row& row) {
         if (predicate(row)) doomed.push_back(id);

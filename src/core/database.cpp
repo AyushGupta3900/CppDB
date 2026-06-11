@@ -10,24 +10,34 @@ bool Database::createTable(const std::string& name, Schema schema) {
     if (name.empty()) {
         throw std::invalid_argument("Database: table name must not be empty");
     }
-    if (tables_.contains(name)) return false;
-    return tables_.insert(name, Table(std::move(schema)));
+    // Construct (and let Table validate the schema) before locking.
+    SharedPtr<Table> table(new Table(std::move(schema)));
+    WriteGuard guard(lock_);
+    return tables_.insert(name, std::move(table));
 }
 
-Table* Database::getTable(const std::string& name) noexcept {
-    return tables_.find(name);
+SharedPtr<Table> Database::getTable(const std::string& name) const {
+    ReadGuard guard(lock_);
+    const SharedPtr<Table>* table = tables_.find(name);
+    return table == nullptr ? SharedPtr<Table>{} : *table;
 }
 
-const Table* Database::getTable(const std::string& name) const noexcept {
-    return tables_.find(name);
+bool Database::dropTable(const std::string& name) {
+    WriteGuard guard(lock_);
+    return tables_.erase(name);  // table dies with its last SharedPtr
 }
 
-bool Database::dropTable(const std::string& name) { return tables_.erase(name); }
+std::size_t Database::tableCount() const {
+    ReadGuard guard(lock_);
+    return tables_.size();
+}
 
 std::vector<std::string> Database::tableNames() const {
+    ReadGuard guard(lock_);
     std::vector<std::string> names;
     names.reserve(tables_.size());
-    tables_.forEach([&](const std::string& name, const Table&) { names.push_back(name); });
+    tables_.forEach(
+        [&](const std::string& name, const SharedPtr<Table>&) { names.push_back(name); });
     std::sort(names.begin(), names.end());
     return names;
 }

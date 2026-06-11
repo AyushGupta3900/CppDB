@@ -14,8 +14,9 @@ BIN      := build/cppdb
 # Each test file becomes its own binary: tests/foo.cpp -> build/test_foo
 TEST_SRC := $(wildcard tests/*.cpp)
 TEST_BIN := $(patsubst tests/%.cpp,build/test_%,$(TEST_SRC))
+TSAN_BIN := $(patsubst tests/%.cpp,build/tsan_%,$(TEST_SRC))
 
-.PHONY: all clean tests run check
+.PHONY: all clean tests run check tsan
 
 all: $(BIN)
 
@@ -38,6 +39,14 @@ tests: $(TEST_BIN)
 # Build and run every test; fails on the first failing test binary
 check: $(TEST_BIN)
 	@for t in $(TEST_BIN); do echo "== $$t"; ./$$t || exit 1; done
+
+# Same suite under ThreadSanitizer (slower; catches data races and deadlocks)
+build/tsan_%: tests/%.cpp $(SRC) $(HDR)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -fsanitize=thread -O1 $(filter %.cpp,$^) -o $@ $(LDFLAGS)
+
+tsan: $(TSAN_BIN)
+	@for t in $(TSAN_BIN); do echo "== $$t"; ./$$t || exit 1; done
 
 run: $(BIN)
 	./$(BIN)

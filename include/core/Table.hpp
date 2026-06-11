@@ -7,6 +7,7 @@
 #include <optional>
 #include <vector>
 
+#include "concurrency/RWLock.hpp"
 #include "core/Row.hpp"
 #include "core/Schema.hpp"
 #include "structures/HashMap.hpp"
@@ -15,7 +16,12 @@ namespace cppdb {
 
 // A table owns its schema and its rows, keyed by the INT primary-key column
 // "id". Lookups return copies so callers never hold pointers into storage
-// (the storage container may rehash, and later stages add concurrent access).
+// (the storage container may rehash, and other threads may write).
+//
+// Thread safety: every public method takes the table's RWLock — reads run in
+// parallel, writes are exclusive. The schema is immutable after construction
+// and needs no lock. Holding a Table reference across calls is safe; the
+// individual calls are atomic, sequences of calls are not.
 class Table {
 public:
     static constexpr const char* kIdColumn = "id";
@@ -35,7 +41,7 @@ public:
     std::optional<Row> findById(std::int64_t id) const;
     bool deleteById(std::int64_t id);
 
-    std::size_t rowCount() const noexcept;
+    std::size_t rowCount() const;
 
     // Full-scan queries; the predicate sees each row in unspecified order.
     std::vector<Row> selectWhere(const std::function<bool(const Row&)>& predicate) const;
@@ -45,6 +51,7 @@ public:
 private:
     std::shared_ptr<const Schema> schema_;
     HashMap<std::int64_t, Row> rows_;
+    mutable RWLock lock_;  // mutable: reads lock too, even on const methods
 };
 
 }  // namespace cppdb

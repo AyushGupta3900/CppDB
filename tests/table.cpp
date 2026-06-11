@@ -108,13 +108,20 @@ int main() {
     CHECK_THROWS(db.createTable("bad", noId), std::invalid_argument);
     CHECK_EQ(db.tableCount(), 1u);
 
-    Table* usersTable = db.getTable("users");
-    CHECK(usersTable != nullptr);
-    CHECK(db.getTable("missing") == nullptr);
+    cppdb::SharedPtr<Table> usersTable = db.getTable("users");
+    CHECK(static_cast<bool>(usersTable));
+    CHECK(!db.getTable("missing"));
 
     // Mutations through getTable persist
     usersTable->insert(makeUser(*usersTable, 1, "Alice", 30));
     CHECK_EQ(db.getTable("users")->rowCount(), 1u);
+
+    // A held handle keeps the table alive across drop + recreate
+    CHECK(db.dropTable("users"));
+    CHECK_EQ(usersTable->rowCount(), 1u);  // still alive through our SharedPtr
+    CHECK(db.createTable("users", userSchema()));
+    CHECK_EQ(db.getTable("users")->rowCount(), 0u);  // fresh table
+    usersTable.reset();
 
     CHECK(db.createTable("orders", userSchema()));
     auto names = db.tableNames();
