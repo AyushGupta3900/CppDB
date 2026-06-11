@@ -40,11 +40,22 @@ See [STARTER.md](../STARTER.md) for the full class blueprints, and [PROGRESS.md]
 You have **Apple clang 21** (C++23) and **make**. No CMake needed.
 
 ```bash
-make tests                              # build all test binaries
+make check                              # build + run every test binary
+make tsan                               # the same suite under ThreadSanitizer
+make bench                              # optimized benchmarks (see BENCHMARKS.md)
 make build/test_schema                  # build one test
 ./build/test_schema                     # run it
-make                                    # build the main app (later)
+make && ./build/cppdb 5432              # build + run the server
 make clean                              # remove build artifacts
+```
+
+Talk to the running server:
+
+```bash
+nc localhost 5432
+CREATE TABLE users (id INT, name TEXT)
+INSERT INTO users (id, name) VALUES (1, 'Alice')
+SELECT * FROM users WHERE id = 1
 ```
 
 See [BUILD.md](BUILD.md) for details on the compilation model.

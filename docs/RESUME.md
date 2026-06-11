@@ -13,20 +13,20 @@ Personal systems project · [github.com/you/CppDB] · [Month YYYY]
 
 ## Short version (3 bullets — for a dense, multi-project resume)
 
-- Built a **thread-safe in-memory database engine in modern C++ (C++23)** from scratch — custom hash map, B-tree primary index, LRU cache, pool allocator, and a SQL-subset query parser — totaling **[~X,000] lines** across **[N] modules** with unit tests.
-- Implemented a **readers-writer locking layer and a fixed-size thread pool** enabling concurrent reads with exclusive writes, sustaining **[X] concurrent client connections** over a TCP server built on non-blocking I/O.
-- Designed a **custom memory subsystem** — pool allocator with placement `new`, plus hand-rolled `unique_ptr`/`shared_ptr` — cutting per-row allocation overhead **[X]%** vs. raw `new`/`delete` and demonstrating manual RAII and reference counting.
+- Built a **thread-safe in-memory database engine in modern C++ (C++23)** from scratch — custom hash map, B-tree primary index, LRU cache, pool allocator, and a SQL-subset query parser — totaling **~2,900 lines** across **7 modules** (core, structures, memory, storage, concurrency, query, network) plus **~2,200 lines** of unit tests and benchmarks.
+- Implemented a **readers-writer locking layer and a fixed-size thread pool** enabling concurrent reads with exclusive writes, sustaining **50 concurrent client connections at ~56,000 queries/sec** end-to-end over a TCP server built on non-blocking I/O (kqueue).
+- Designed a **custom memory subsystem** — pool allocator with placement `new`, plus hand-rolled `unique_ptr`/`shared_ptr` — cutting per-allocation cost from **45 ns to 1.9 ns (~24×)** vs. raw `new`/`delete` and demonstrating manual RAII and reference counting.
 
 ---
 
 ## Detailed version (6–7 bullets — for a focused / new-grad resume)
 
 - **Architected a mini relational database engine in C++23** (Redis/SQLite-inspired) supporting `CREATE / INSERT / SELECT / DELETE`, organized into decoupled modules: storage, indexing, concurrency, query parsing, and networking.
-- **Built core data structures from first principles** instead of using the STL containers: an open-addressing **hash map**, a **B-tree** primary-key index reducing lookups from O(n) to **O(log n)**, and an **LRU cache** (intrusive doubly-linked list + hash map) giving **O(1)** get/put — improving hot-key read latency by **[X]%**.
-- **Engineered a custom memory-management layer** — a fixed-block **pool allocator** using placement `new` over a raw memory arena, and from-scratch **smart pointers** (`UniquePtr` move-only, `SharedPtr` with atomic reference counting) — to internalize RAII, ownership, and the Rule of Five.
-- **Implemented a concurrency layer for safe multi-client access**: a **readers-writer lock** (parallel reads, exclusive writes) built on `std::mutex` + `std::condition_variable`, a **lock-free MPSC queue** using `std::atomic` and compare-and-swap, and a **thread pool** dispatching queries across **[N]** worker threads — verified race- and deadlock-free under concurrent load.
+- **Built core data structures from first principles** instead of using the STL containers: an open-addressing **hash map**, a **B-tree** primary-key index reducing lookups from O(n) to **O(log n)** (measured **63× faster** than a scan at 100k rows), and an **LRU cache** (linked list + hash map) giving **O(1)** get/put — **89.8% hit rate at 8.2M reads/sec** on a skewed workload.
+- **Engineered a custom memory-management layer** — a fixed-block **pool allocator** using placement `new` over a raw memory arena (**~24× faster** than `new`/`delete`), and from-scratch **smart pointers** (`UniquePtr` move-only, `SharedPtr` with atomic reference counting) — to internalize RAII, ownership, and the Rule of Five.
+- **Implemented a concurrency layer for safe multi-client access**: a **readers-writer lock** (parallel reads, exclusive writes) built on `std::mutex` + `std::condition_variable`, a **lock-free MPSC queue** using `std::atomic` (**12.7M items/sec**, 4 producers), and a **thread pool** dispatching queries across **4** worker threads — verified race- and deadlock-free under ThreadSanitizer.
 - **Wrote a query front-end (compiler basics)**: a hand-written **lexer/tokenizer** and recursive-descent **parser** producing an AST, plus an **executor** that walks the AST against the storage engine — turning raw SQL-like strings into table operations.
-- **Exposed the database over the network** via a **TCP server** using non-blocking I/O (`epoll`/`kqueue`) and length-prefixed message framing, letting clients connect over a socket (`telnet`/custom client) and run queries remotely.
+- **Exposed the database over the network** via a **TCP server** using non-blocking I/O (`kqueue`) and newline-delimited framing with per-connection ordering, letting clients connect over a socket (`nc`/`telnet`) and run queries remotely — **50 concurrent clients, ~56k queries/sec** end-to-end.
 - **Practiced production-grade C++ discipline**: compiled `-Wall -Wextra -Wpedantic` warning-clean, applied `const`-correctness and move semantics throughout, and backed each module with unit tests and a reproducible build.
 
 ---

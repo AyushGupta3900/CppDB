@@ -48,6 +48,14 @@ build/tsan_%: tests/%.cpp $(SRC) $(HDR)
 tsan: $(TSAN_BIN)
 	@for t in $(TSAN_BIN); do echo "== $$t"; ./$$t || exit 1; done
 
+# Benchmarks: optimized build, otherwise the numbers are meaningless
+build/bench: bench/bench.cpp $(SRC) $(HDR)
+	@mkdir -p build
+	$(CXX) -std=c++23 -Wall -Wextra -Wpedantic -O2 -DNDEBUG -Iinclude $(filter %.cpp,$^) -o $@ $(LDFLAGS)
+
+bench: build/bench
+	./build/bench
+
 run: $(BIN)
 	./$(BIN)
 
