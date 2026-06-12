@@ -1,0 +1,33 @@
+# CI: warning-clean build, full test suite, and both sanitizer sweeps.
+# macOS runner is required — the network layer uses kqueue (BSD/macOS).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: build + check (-Werror)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build app and tests, run suite
+        run: make check WERROR=1
+      - name: Build server binary
+        run: make WERROR=1
+
+  tsan:
+    name: ThreadSanitizer
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: make tsan WERROR=1
+
+  asan:
+    name: AddressSanitizer + UBSan
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: make asan WERROR=1
