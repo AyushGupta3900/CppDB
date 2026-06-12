@@ -30,6 +30,12 @@ namespace cppdb {
 // must ensure run() has returned before destroying the server.
 class TCPServer {
 public:
+    // Backpressure limits: a connection that sends a longer line, or
+    // pipelines more unanswered queries, is dropped — otherwise a hostile
+    // client could grow server memory without bound.
+    static constexpr std::size_t kMaxLineBytes = 64 * 1024;
+    static constexpr std::size_t kMaxPendingQueries = 1024;
+
     // port 0 picks an ephemeral port — read it back with port().
     TCPServer(std::uint16_t port, Database& db, std::size_t workerCount = 4);
     ~TCPServer();

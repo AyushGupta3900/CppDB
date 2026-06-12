@@ -152,21 +152,33 @@ void TCPServer::handleReadable(const std::shared_ptr<Connection>& conn) {
 
     // Split complete lines out of the inbox and queue them on the strand.
     bool shouldDispatch = false;
+    bool overLimit = false;
     std::size_t newline;
     while ((newline = conn->inbox.find('\n')) != std::string::npos) {
         std::string line = conn->inbox.substr(0, newline);
         conn->inbox.erase(0, newline + 1);
         if (!line.empty() && line.back() == '\r') line.pop_back();  // telnet
         if (line.empty()) continue;
+        if (line.size() > kMaxLineBytes) {
+            overLimit = true;
+            break;
+        }
         std::lock_guard<std::mutex> guard(conn->mutex);
+        if (conn->pending.size() >= kMaxPendingQueries) {
+            overLimit = true;
+            break;
+        }
         conn->pending.push_back(std::move(line));
         if (!conn->busy) {
             conn->busy = true;
             shouldDispatch = true;
         }
     }
+    // A newline-free buffer past the limit can never become a legal query.
+    if (conn->inbox.size() > kMaxLineBytes) overLimit = true;
+
     if (shouldDispatch) dispatch(conn);
-    if (peerClosed) dropConnection(conn->fd);
+    if (peerClosed || overLimit) dropConnection(conn->fd);
 }
 
 // One worker task drains a connection's queue in order; busy ensures at most

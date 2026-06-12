@@ -145,6 +145,21 @@ int main() {
         CHECK_EQ(last, "(200 rows)");
     }
 
+    {
+        // A line over the limit gets the connection dropped...
+        Client flooder(server.port());
+        CHECK(flooder.connected());
+        const std::string giant(TCPServer::kMaxLineBytes + 1024, 'x');
+        flooder.send(giant);
+        CHECK_EQ(flooder.readLine(), "");  // server hung up on us
+
+        // ...but the server itself keeps serving other clients
+        Client survivor(server.port());
+        survivor.send("SELECT name FROM users WHERE id = 1");
+        CHECK_EQ(survivor.readLine(), "name=Alice");
+        CHECK_EQ(survivor.readLine(), "(1 row)");
+    }
+
     server.stop();
     serverThread.join();
     CHECK(true);  // clean shutdown reached
