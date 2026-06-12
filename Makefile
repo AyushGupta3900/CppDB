@@ -6,6 +6,11 @@ CXX      := clang++
 CXXFLAGS := -std=c++23 -Wall -Wextra -Wpedantic -g -Iinclude
 LDFLAGS  := -pthread
 
+# `make WERROR=1 ...` promotes warnings to errors (used by CI)
+ifdef WERROR
+CXXFLAGS += -Werror
+endif
+
 SRC      := $(shell find src -name '*.cpp' 2>/dev/null)
 HDR      := $(shell find include tests -name '*.hpp' 2>/dev/null)
 OBJ      := $(SRC:.cpp=.o)
@@ -15,8 +20,9 @@ BIN      := build/cppdb
 TEST_SRC := $(wildcard tests/*.cpp)
 TEST_BIN := $(patsubst tests/%.cpp,build/test_%,$(TEST_SRC))
 TSAN_BIN := $(patsubst tests/%.cpp,build/tsan_%,$(TEST_SRC))
+ASAN_BIN := $(patsubst tests/%.cpp,build/asan_%,$(TEST_SRC))
 
-.PHONY: all clean tests run check tsan
+.PHONY: all clean tests run check tsan asan
 
 all: $(BIN)
 
@@ -47,6 +53,14 @@ build/tsan_%: tests/%.cpp $(SRC) $(HDR)
 
 tsan: $(TSAN_BIN)
 	@for t in $(TSAN_BIN); do echo "== $$t"; ./$$t || exit 1; done
+
+# Address + UndefinedBehavior sanitizers (memory errors, leaks, UB)
+build/asan_%: tests/%.cpp $(SRC) $(HDR)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -O1 $(filter %.cpp,$^) -o $@ $(LDFLAGS)
+
+asan: $(ASAN_BIN)
+	@for t in $(ASAN_BIN); do echo "== $$t"; ./$$t || exit 1; done
 
 # Benchmarks: optimized build, otherwise the numbers are meaningless
 build/bench: bench/bench.cpp $(SRC) $(HDR)
