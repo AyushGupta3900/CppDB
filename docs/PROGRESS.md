@@ -26,6 +26,7 @@ Legend: ✅ done & reviewed · 🚧 in progress · ⬜ not started
 
 ## Stage 6 — Query Parser
 - ✅ Lexer → Parser → Executor
+- ✅ UPDATE statement, `WHERE ... AND ...`, SQL-style `''` escapes
 
 ## Stage 7 — TCP Server
 - ✅ TCPServer
